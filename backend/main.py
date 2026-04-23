@@ -434,12 +434,38 @@ def get_weekly_report(
     dates = [str(d.created_date) for d in diaries]
     period = f"{dates[-1]} ~ {dates[0]}" if len(dates) >= 2 else dates[0]
 
+    # GPT로 인사이트 + 추천 생성
+    mood_summary = ", ".join([f"{e} {c}일" for e, c in mood_counter.most_common()])
+    keyword_summary = ", ".join([w for w, c in word_counter])
+    insight_text = "주간 분석 데이터가 부족합니다."
+    recommendation_text = "매일 하루 돌아보기를 통해 더 정확한 분석을 받아보세요."
+
+    if mood_summary:
+        try:
+            from ai_module import client
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "너는 심리 상담 리포트를 작성하는 AI야. 사용자의 주간 기분과 키워드를 보고 2~3문장으로 인사이트를 작성해. 반말, 따뜻하게. 진단하지 마."},
+                    {"role": "user", "content": f"이번 주 기분 분포: {mood_summary}\n주요 키워드: {keyword_summary}\n\n이 데이터를 바탕으로 1) 인사이트 (이번 주 감정 흐름 요약) 2) 추천 (다음 주에 시도해볼 만한 것)을 각각 2문장으로 써줘. JSON으로: {{\"insight\":\"...\",\"recommendation\":\"...\"}}"},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.5,
+                max_tokens=200,
+            )
+            import json
+            result = json.loads(resp.choices[0].message.content)
+            insight_text = result.get("insight", insight_text)
+            recommendation_text = result.get("recommendation", recommendation_text)
+        except Exception as e:
+            print(f"[AI] 주간 인사이트 생성 실패: {e}")
+
     return {
         "period": period,
         "mood_distribution": dict(mood_counter),
         "top_keywords": [{"word": w, "count": c} for w, c in word_counter],
-        "insight": "주간 분석이 생성되었습니다. AI 모듈 연동 후 상세 인사이트가 제공됩니다.",
-        "recommendation": "매일 데일리 체크인과 일기 작성을 통해 더 정확한 분석을 받아보세요.",
+        "insight": insight_text,
+        "recommendation": recommendation_text,
     }
 
 
@@ -451,12 +477,18 @@ def get_depression_report(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 사용자 대화 기록 조회 (최근 30개)
+    from datetime import timedelta
+
+    # 최근 30일 사용자 대화 조회
+    thirty_days_ago = datetime.now() - timedelta(days=30)
     logs = (
         db.query(ChatLog)
-        .filter(ChatLog.user_id == current_user.id, ChatLog.role == "user")
+        .filter(
+            ChatLog.user_id == current_user.id,
+            ChatLog.role == "user",
+            ChatLog.created_date >= thirty_days_ago,
+        )
         .order_by(ChatLog.created_date.desc())
-        .limit(30)
         .all()
     )
 
@@ -469,11 +501,40 @@ def get_depression_report(
             "kluebert_analysis": None,
         }
 
-    # KlueBERT로 최근 대화 종합 분석
-    combined_text = " ".join([log.message for log in logs[:10]])  # 최근 10개 대화 합산
+    # DB 캐시에서 kluebert_prob 읽기 (의사 대시보드와 동일 방식)
     user_age = current_user.age or 25
     user_gender = current_user.gender or "남"
-    kluebert_result = analyze_depression(combined_text, age=user_age, gender=user_gender)
+    needs_commit = False
+
+    for log in logs:
+        if log.kluebert_prob is None:
+            try:
+                r = analyze_depression(log.message, age=user_age, gender=user_gender)
+                log.kluebert_prob = r.get("prob", 0)
+                log.depression_level = r.get("level", 0)
+                needs_commit = True
+            except:
+                log.kluebert_prob = 0
+                needs_commit = True
+
+    if needs_commit:
+        db.commit()
+
+    # 종합 우울 확률 = 개별 확률의 평균 (의사 대시보드와 동일)
+    kluebert_avg = sum(l.kluebert_prob for l in logs) / len(logs) if logs else 0
+    neg_count = sum(1 for l in logs if l.kluebert_prob >= 0.5)
+    kluebert_prob_pct = round(kluebert_avg * 100, 1)
+    kluebert_neg_ratio = round((neg_count / len(logs)) * 100, 1) if logs else 0
+
+    # 위험 단계 (의사 대시보드와 동일)
+    if kluebert_avg >= 0.7:
+        kluebert_level = 3
+    elif kluebert_avg >= 0.5:
+        kluebert_level = 2
+    elif kluebert_avg >= 0.3:
+        kluebert_level = 1
+    else:
+        kluebert_level = 0
 
     # 위험 대화 조회
     critical = (
@@ -484,28 +545,26 @@ def get_depression_report(
         .all()
     )
 
-    # 종합 판단 (KlueBERT 확률 + 위험 대화 수 기반)
-    prob = kluebert_result.get("prob", 0)
-    critical_count = len(critical)
+    # 부정 기분 선택률
+    recent_diaries = db.query(Diary).filter(Diary.user_id == current_user.id).order_by(Diary.created_date.desc()).limit(30).all()
+    mood_dist = Counter(d.mood for d in recent_diaries if d.mood)
+    neg_moods = sum(v for k, v in mood_dist.items() if k in ("😢", "😞", "😤", "😰", "😫"))
+    total_moods = sum(mood_dist.values()) or 1
+    mood_neg_ratio = neg_moods / total_moods
 
-    if prob >= 0.7 or critical_count >= 3:
-        level = "전문가 상담 권장"
-        emoji = "☁️"
-        insight = f"KlueBERT 분석 결과 우울 위험 확률이 {prob*100:.0f}%로 높게 나타났어요. 최근 대화에서 부정적 감정 표현이 {critical_count}건 관찰되었습니다. 전문가와 상담을 고려해보세요."
-    elif prob >= 0.4 or critical_count >= 1:
-        level = "관심 필요"
-        emoji = "🌤"
-        insight = f"KlueBERT 분석 결과 우울 위험 확률이 {prob*100:.0f}%입니다. 일부 대화에서 스트레스 표현이 관찰되었어요. 꾸준히 마음 상태를 확인해보세요."
+    # 종합 판단 — 의사 대시보드와 완전 동일 기준
+    if kluebert_avg >= 0.7 or mood_neg_ratio >= 0.6:
+        level = "주의"
+        insight = f"최근 30일 대화의 평균 우울 확률이 {kluebert_prob_pct}%로 높게 나타났어요. 전문가와 상담을 고려해보세요."
+    elif kluebert_avg >= 0.4 or mood_neg_ratio >= 0.3:
+        level = "관심"
+        insight = f"최근 30일 대화의 평균 우울 확률이 {kluebert_prob_pct}%입니다. 꾸준히 마음 상태를 확인해보세요."
     else:
         level = "양호"
-        emoji = "🌿"
-        insight = f"KlueBERT 분석 결과 우울 위험 확률이 {prob*100:.0f}%로 낮아요. 좋은 상태를 유지하고 있네요!"
+        insight = f"최근 30일 대화의 평균 우울 확률이 {kluebert_prob_pct}%로 낮아요. 좋은 상태를 유지하고 있네요!"
 
     evidence = [
-        {
-            "message": c.user_message,
-            "created_date": c.created_date.isoformat() if c.created_date else "",
-        }
+        {"message": c.user_message, "created_date": c.created_date.isoformat() if c.created_date else ""}
         for c in critical
     ]
 
@@ -515,9 +574,11 @@ def get_depression_report(
         "insight": insight,
         "evidence_conversations": evidence,
         "kluebert_analysis": {
-            "probability": round(prob * 100, 1),
-            "status": kluebert_result.get("status", "분석 불가"),
-            "level": kluebert_result.get("level", 0),
+            "probability": kluebert_prob_pct,
+            "negative_ratio": kluebert_neg_ratio,
+            "status": "있음" if kluebert_avg >= 0.5 else "없음",
+            "level": kluebert_level,
+            "analyzed_count": len(logs),
         },
     }
 
@@ -586,15 +647,41 @@ def get_patients(current_user: User = Depends(require_doctor), db: Session = Dep
         p = db.query(User).filter(User.id == link.patient_id).first()
         if not p:
             continue
-        # 최근 활동: 최근 일기, 수면, 대화
         last_diary = db.query(Diary).filter(Diary.user_id == p.id).order_by(Diary.created_date.desc()).first()
         last_mood = last_diary.mood if last_diary else None
         last_diary_date = str(last_diary.created_date) if last_diary else None
-        # 최근 7일 감정 분포
         recent_diaries = db.query(Diary).filter(Diary.user_id == p.id).order_by(Diary.created_date.desc()).limit(7).all()
         mood_counts = Counter(d.mood for d in recent_diaries if d.mood)
-        # 위험 신호 카운트
         critical_count = db.query(CriticalConversation).filter(CriticalConversation.user_id == p.id).count()
+
+        # 종합 위험도 — 백엔드에서 통일 계산
+        # 1) 부정 기분 선택률
+        neg_moods = sum(v for k, v in mood_counts.items() if k in ("😢", "😞", "😤", "😰", "😫"))
+        total_moods = sum(mood_counts.values()) or 1
+        mood_neg_ratio = neg_moods / total_moods
+
+        # 2) KlueBERT 확률 (DB 캐시에서 읽기)
+        from datetime import timedelta
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        user_logs = db.query(ChatLog).filter(
+            ChatLog.user_id == p.id, ChatLog.role == "user",
+            ChatLog.created_date >= thirty_days_ago,
+            ChatLog.kluebert_prob != None,
+        ).all()
+        kluebert_avg = 0
+        if user_logs:
+            kluebert_avg = sum(l.kluebert_prob for l in user_logs) / len(user_logs)
+
+        # 종합 판단 (종합 우울 확률 + 부정 기분 선택률)
+        if kluebert_avg >= 0.7 or mood_neg_ratio >= 0.6:
+            risk_level = "주의"
+            risk_color = "high"
+        elif kluebert_avg >= 0.4 or mood_neg_ratio >= 0.3:
+            risk_level = "관심"
+            risk_color = "mid"
+        else:
+            risk_level = "양호"
+            risk_color = "low"
 
         result.append({
             "patient_id": p.id,
@@ -607,6 +694,8 @@ def get_patients(current_user: User = Depends(require_doctor), db: Session = Dep
             "last_activity": last_diary_date,
             "mood_distribution_7d": dict(mood_counts),
             "critical_count": critical_count,
+            "risk_level": risk_level,
+            "risk_color": risk_color,
         })
     return result
 
@@ -692,8 +781,14 @@ def patient_overview(patient_id: int, current_user: User = Depends(require_docto
     neg_ratio = neg_moods / total_moods
     critical_count = len(criticals)
 
-    # KlueBERT 분석 — DB 캐시에서 읽기 (미분석 대화는 별도 API에서 처리)
-    user_logs = db.query(ChatLog).filter(ChatLog.user_id == patient_id, ChatLog.role == "user").order_by(ChatLog.id.desc()).limit(10).all()
+    # KlueBERT 분석 — 최근 30일 대화 기반, DB 캐시 사용
+    from datetime import timedelta
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    user_logs = db.query(ChatLog).filter(
+        ChatLog.user_id == patient_id,
+        ChatLog.role == "user",
+        ChatLog.created_date >= thirty_days_ago,
+    ).order_by(ChatLog.id.desc()).all()
     kluebert_neg_ratio = 0
     kluebert_prob_overall = 0
     kluebert_total = len(user_logs)
@@ -715,10 +810,10 @@ def patient_overview(patient_id: int, current_user: User = Depends(require_docto
         kluebert_neg_ratio = round((neg_count / counted) * 100, 1) if counted else 0
         kluebert_prob_overall = round((prob_sum / counted) * 100, 1) if counted else 0
 
-    if kluebert_prob_overall >= 70 or neg_ratio >= 0.6 or critical_count >= 3:
+    if kluebert_prob_overall >= 70 or neg_ratio >= 0.6:
         risk_level = "높음"
         risk_color = "high"
-    elif kluebert_prob_overall >= 40 or neg_ratio >= 0.3 or critical_count >= 1:
+    elif kluebert_prob_overall >= 40 or neg_ratio >= 0.3:
         risk_level = "중간"
         risk_color = "mid"
     else:

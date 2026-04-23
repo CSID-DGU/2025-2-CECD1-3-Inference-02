@@ -3893,10 +3893,19 @@ function SleepPage({ user, token, navigate, targetDate }) {
 }
 
 function SleepRecord({ user, token, targetDate, existing, onSaved }) {
-	const [bedtime, setBedtime] = useState(existing?.bedtime || "23:30");
-	const [wakeup, setWakeup] = useState(existing?.wakeup || "07:00");
-	const [issues, setIssues] = useState(existing?.issues || []);
+	const [bedtime, setBedtime] = useState("23:30");
+	const [wakeup, setWakeup] = useState("07:00");
+	const [issues, setIssues] = useState([]);
 	const [loading, setLoading] = useState(false);
+
+	// existing이 나중에 들어와도 반영
+	useEffect(() => {
+		if (existing) {
+			setBedtime(existing.bedtime || "23:30");
+			setWakeup(existing.wakeup || "07:00");
+			setIssues(existing.issues || []);
+		}
+	}, [existing]);
 	const isToday = targetDate === todayStr();
 	const dateLabel = isToday ? "오늘" : fmtDate(targetDate);
 	const issueOpts = [
@@ -4742,7 +4751,7 @@ function ReportPage({ token, navigate }) {
 							>
 								{dep.overall_risk_level === "양호"
 									? "🌿"
-									: dep.overall_risk_level === "관심 필요"
+									: dep.overall_risk_level === "관심"
 										? "🌤"
 										: "☁️"}
 							</p>
@@ -4752,9 +4761,8 @@ function ReportPage({ token, navigate }) {
 									fontWeight: "700",
 									color:
 										dep.overall_risk_level === "양호"
-											? theme.primary
-											: dep.overall_risk_level ===
-												  "관심 필요"
+											? theme.accent
+											: dep.overall_risk_level === "관심"
 												? "#FF9800"
 												: theme.danger,
 								}}
@@ -4801,19 +4809,31 @@ function ReportPage({ token, navigate }) {
 									>
 										KlueBERT AI 분석
 									</p>
+									<span
+										style={{
+											fontSize: "11px",
+											color: theme.textSub,
+											marginLeft: "auto",
+										}}
+									>
+										최근{" "}
+										{dep.kluebert_analysis.analyzed_count ||
+											0}
+										건
+									</span>
 								</div>
 								<div
 									style={{
-										display: "flex",
-										gap: "10px",
-										marginBottom: "12px",
+										display: "grid",
+										gridTemplateColumns: "1fr 1fr 1fr",
+										gap: "8px",
+										marginBottom: "10px",
 									}}
 								>
 									<div
 										style={{
-											flex: 1,
 											textAlign: "center",
-											padding: "12px",
+											padding: "12px 8px",
 											background: theme.card,
 											borderRadius: theme.radiusSm,
 										}}
@@ -4837,18 +4857,54 @@ function ReportPage({ token, navigate }) {
 										</p>
 										<p
 											style={{
-												fontSize: "11px",
+												fontSize: "10px",
 												color: theme.textSub,
 											}}
 										>
-											우울 위험 확률
+											종합 우울 확률
 										</p>
 									</div>
 									<div
 										style={{
-											flex: 1,
 											textAlign: "center",
-											padding: "12px",
+											padding: "12px 8px",
+											background: theme.card,
+											borderRadius: theme.radiusSm,
+										}}
+									>
+										<p
+											style={{
+												fontSize: "24px",
+												fontWeight: "700",
+												color:
+													(dep.kluebert_analysis
+														.negative_ratio || 0) >=
+													50
+														? theme.danger
+														: (dep.kluebert_analysis
+																	.negative_ratio ||
+																	0) >= 30
+															? "#FF9800"
+															: theme.accent,
+											}}
+										>
+											{dep.kluebert_analysis
+												.negative_ratio || 0}
+											%
+										</p>
+										<p
+											style={{
+												fontSize: "10px",
+												color: theme.textSub,
+											}}
+										>
+											부정 대화 비율
+										</p>
+									</div>
+									<div
+										style={{
+											textAlign: "center",
+											padding: "12px 8px",
 											background: theme.card,
 											borderRadius: theme.radiusSm,
 										}}
@@ -4873,7 +4929,7 @@ function ReportPage({ token, navigate }) {
 										</p>
 										<p
 											style={{
-												fontSize: "11px",
+												fontSize: "10px",
 												color: theme.textSub,
 											}}
 										>
@@ -4886,12 +4942,15 @@ function ReportPage({ token, navigate }) {
 										fontSize: "12px",
 										color: theme.blue,
 										textAlign: "center",
+										padding: "8px",
+										background: theme.card,
+										borderRadius: theme.radiusSm,
 									}}
 								>
-									판정:{" "}
+									AI 판정:{" "}
 									{dep.kluebert_analysis.status === "있음"
-										? "우울 징후 감지됨"
-										: "우울 징후 없음"}
+										? "⚠️ 우울 징후 감지됨"
+										: "✅ 우울 징후 없음"}
 								</p>
 							</div>
 						) : (
@@ -5336,18 +5395,10 @@ function DoctorHome({ user, token, navigate, setSelectedPatient }) {
 	};
 
 	const riskBadge = (p) => {
-		const neg = Object.entries(p.mood_distribution_7d || {})
-			.filter(([k]) => ["😢", "😞", "😤", "😰", "😫"].includes(k))
-			.reduce((s, [, v]) => s + v, 0);
-		const total =
-			Object.values(p.mood_distribution_7d || {}).reduce(
-				(s, v) => s + v,
-				0,
-			) || 1;
-		const ratio = neg / total;
-		if (ratio >= 0.6 || p.critical_count >= 3)
+		const rl = p.risk_level || "양호";
+		if (rl === "주의")
 			return { label: "주의", color: theme.danger, bg: "#FFEBEE" };
-		if (ratio >= 0.3 || p.critical_count >= 1)
+		if (rl === "관심")
 			return { label: "관심", color: "#FF9800", bg: "#FFF3E0" };
 		return { label: "양호", color: theme.accent, bg: theme.accentLight };
 	};
