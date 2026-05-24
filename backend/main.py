@@ -166,8 +166,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     depression_result = analyze_depression(req.message, age=user_age, gender=user_gender)
     depression_level = depression_result["level"]
 
-    enhanced_message = req.message + progress_hint if progress_hint else req.message
-    ai_result = generate_reply(enhanced_message, depression_level, conversation_history, mode=req.mode, character=req.character)
+    ai_result = generate_reply(req.message, depression_level, conversation_history, mode=req.mode, character=req.character, user_id=req.user_id, age=user_age, gender=user_gender, progress_hint=progress_hint)
 
     # 서버에서 progress 강제 덮어쓰기
     if req.mode == "routine":
