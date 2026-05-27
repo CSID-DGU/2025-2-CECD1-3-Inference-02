@@ -1069,11 +1069,7 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 						<button
 							key={i}
 							onClick={() => {
-								if (t.locked) {
-									alert("수면 기록을 먼저 완료해주세요!");
-									navigate("sleep");
-									return;
-								}
+								if (t.locked) return;
 								navigate(t.page);
 							}}
 							style={{
@@ -1563,24 +1559,141 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 										→
 									</button>
 								)}
-								{canRecord && !selSleepDone && (
-									<button
-										onClick={() => navigate("sleep")}
-										style={{
-											marginLeft: "auto",
-											fontSize: "12px",
-											color: theme.accent,
-											background: "none",
-											border: "none",
-											cursor: "pointer",
-											fontWeight: "600",
-										}}
-									>
-										수면 기록하기 →
-									</button>
-								)}
 							</div>
 						)}
+
+						{/* 일기 */}
+						{(() => {
+							const selTalkDone = !!(
+								selDiary &&
+								(selDiary.content?.includes(
+									"[하루 돌아보기]",
+								) ||
+									selDiary.content?.includes(
+										"[데일리 체크인]",
+									))
+							);
+							const selJournalDone = !!(
+								selDiary && selDiary.content?.includes("[일기]")
+							);
+							const journalText = selDiary?.content
+								?.match(/\[일기\]\s*([\s\S]*)/)?.[1]
+								?.trim();
+							if (selJournalDone)
+								return (
+									<div
+										style={{
+											...s.card,
+											padding: "16px 20px",
+										}}
+									>
+										<div
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "10px",
+												marginBottom: "8px",
+											}}
+										>
+											<span style={{ fontSize: "20px" }}>
+												📝
+											</span>
+											<p
+												style={{
+													fontSize: "14px",
+													fontWeight: "600",
+												}}
+											>
+												일기
+											</p>
+										</div>
+										<p
+											style={{
+												fontSize: "13px",
+												lineHeight: "1.6",
+												color: theme.textSub,
+												overflow: "hidden",
+												display: "-webkit-box",
+												WebkitLineClamp: 3,
+												WebkitBoxOrient: "vertical",
+											}}
+										>
+											{journalText}
+										</p>
+									</div>
+								);
+							if (selTalkDone && !selJournalDone)
+								return (
+									<button
+										onClick={() => navigate("journal")}
+										style={{
+											...s.card,
+											width: "100%",
+											padding: "16px 20px",
+											border: `1px solid ${theme.primary}30`,
+											cursor: "pointer",
+											textAlign: "left",
+											background: theme.primaryLight,
+										}}
+									>
+										<div
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "10px",
+											}}
+										>
+											<span style={{ fontSize: "20px" }}>
+												📝
+											</span>
+											<div style={{ flex: 1 }}>
+												<p
+													style={{
+														fontSize: "14px",
+														fontWeight: "600",
+													}}
+												>
+													일기를 아직 안 썼어요
+												</p>
+												<p
+													style={{
+														fontSize: "12px",
+														color: theme.textSub,
+													}}
+												>
+													오늘의 하루를 기록해보세요
+												</p>
+											</div>
+											<span
+												style={{
+													fontSize: "12px",
+													color: theme.primary,
+													fontWeight: "600",
+												}}
+											>
+												쓰러 가기 →
+											</span>
+										</div>
+									</button>
+								);
+							return (
+								<div
+									style={{
+										...s.card,
+										padding: "16px 20px",
+										display: "flex",
+										alignItems: "center",
+										gap: "12px",
+										color: theme.textLight,
+									}}
+								>
+									<span style={{ fontSize: "20px" }}>🔒</span>
+									<p style={{ fontSize: "13px" }}>
+										하루 돌아보기를 먼저 완료해주세요
+									</p>
+								</div>
+							);
+						})()}
 					</>
 				)}
 			</div>
@@ -7058,7 +7171,6 @@ function JournalPage({ user, token, navigate, targetDate }) {
 	const [text, setText] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [saved, setSaved] = useState(false);
-	const [showSummary, setShowSummary] = useState(false);
 
 	useEffect(() => {
 		(async () => {
@@ -7251,14 +7363,12 @@ function JournalPage({ user, token, navigate, targetDate }) {
 						className="fade-in-up"
 						style={{ marginBottom: "16px" }}
 					>
-						<button
-							onClick={() => setShowSummary(!showSummary)}
+						<div
 							style={{
 								...s.card,
 								width: "100%",
 								border: `1px solid ${theme.blue}30`,
 								background: theme.blueLight,
-								cursor: "pointer",
 								padding: "14px 18px",
 								textAlign: "left",
 							}}
@@ -7267,52 +7377,34 @@ function JournalPage({ user, token, navigate, targetDate }) {
 								style={{
 									display: "flex",
 									alignItems: "center",
-									justifyContent: "space-between",
+									gap: "8px",
+									marginBottom: "10px",
 								}}
 							>
-								<div
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: "8px",
-									}}
-								>
-									<span style={{ fontSize: "16px" }}>🤖</span>
-									<p
-										style={{
-											fontSize: "13px",
-											fontWeight: "600",
-											color: theme.blue,
-										}}
-									>
-										AI가 정리한 오늘의 요약
-									</p>
-								</div>
-								<span
-									style={{
-										fontSize: "12px",
-										color: theme.blue,
-									}}
-								>
-									{showSummary ? "접기 ▲" : "펼치기 ▼"}
-								</span>
-							</div>
-							{showSummary && (
+								<span style={{ fontSize: "16px" }}>🤖</span>
 								<p
 									style={{
 										fontSize: "13px",
-										lineHeight: "1.7",
-										color: theme.text,
-										marginTop: "10px",
-										padding: "10px 12px",
-										background: theme.card,
-										borderRadius: theme.radiusSm,
+										fontWeight: "600",
+										color: theme.blue,
 									}}
 								>
-									{summary}
+									AI가 정리한 오늘의 요약
 								</p>
-							)}
-						</button>
+							</div>
+							<p
+								style={{
+									fontSize: "13px",
+									lineHeight: "1.7",
+									color: theme.text,
+									padding: "10px 12px",
+									background: theme.card,
+									borderRadius: theme.radiusSm,
+								}}
+							>
+								{summary}
+							</p>
+						</div>
 					</div>
 				)}
 
