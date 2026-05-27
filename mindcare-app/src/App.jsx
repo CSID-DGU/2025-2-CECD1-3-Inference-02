@@ -340,6 +340,14 @@ export default function App() {
 				{!isDoctor && page === "report" && (
 					<ReportPage token={token} navigate={nav} />
 				)}
+				{!isDoctor && page === "journal" && (
+					<JournalPage
+						user={user}
+						token={token}
+						navigate={nav}
+						targetDate={selectedDate}
+					/>
+				)}
 				{!isDoctor && page === "sleep" && (
 					<SleepPage
 						user={user}
@@ -375,9 +383,15 @@ export default function App() {
 				{/* 하단 네비 */}
 				{user &&
 					!isDoctor &&
-					!["login", "register", "chat", "routine"].includes(
-						page,
-					) && <BottomNav current={page} navigate={nav} />}
+					![
+						"login",
+						"register",
+						"chat",
+						"routine",
+						"journal",
+					].includes(page) && (
+						<BottomNav current={page} navigate={nav} />
+					)}
 				{user &&
 					isDoctor &&
 					!["login", "register", "doctorPatient", "mypage"].includes(
@@ -916,7 +930,14 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 	const todayDiary = diaries.find((d) => d.created_date === todayStr());
 	const todaySleep = sleepLogs.find((sl) => sl.date === todayStr());
 	const sleepDone = !!todaySleep;
-	const diaryDone = !!todayDiary;
+	const talkDone = !!(
+		todayDiary &&
+		(todayDiary.content?.includes("[하루 돌아보기]") ||
+			todayDiary.content?.includes("[데일리 체크인]"))
+	);
+	const journalDone = !!(
+		todayDiary && todayDiary.content?.includes("[일기]")
+	);
 	const tasks = [
 		{
 			done: sleepDone,
@@ -927,7 +948,7 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 			locked: false,
 		},
 		{
-			done: diaryDone,
+			done: talkDone,
 			label: "하루 돌아보기",
 			icon: "💭",
 			page: "routine",
@@ -935,6 +956,16 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 				? "오늘 하루를 이야기해요"
 				: "수면 기록을 먼저 완료해주세요",
 			locked: !sleepDone,
+		},
+		{
+			done: journalDone,
+			label: "일기 쓰기",
+			icon: "📝",
+			page: "journal",
+			desc: talkDone
+				? "오늘의 일기를 남겨보세요"
+				: "하루 돌아보기를 먼저 완료해주세요",
+			locked: !talkDone,
 		},
 	];
 	const doneTasks = tasks.filter((t) => t.done).length;
@@ -1038,11 +1069,7 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 						<button
 							key={i}
 							onClick={() => {
-								if (t.locked) {
-									alert("수면 기록을 먼저 완료해주세요!");
-									navigate("sleep");
-									return;
-								}
+								if (t.locked) return;
 								navigate(t.page);
 							}}
 							style={{
@@ -1532,24 +1559,141 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 										→
 									</button>
 								)}
-								{canRecord && !selSleepDone && (
-									<button
-										onClick={() => navigate("sleep")}
-										style={{
-											marginLeft: "auto",
-											fontSize: "12px",
-											color: theme.accent,
-											background: "none",
-											border: "none",
-											cursor: "pointer",
-											fontWeight: "600",
-										}}
-									>
-										수면 기록하기 →
-									</button>
-								)}
 							</div>
 						)}
+
+						{/* 일기 */}
+						{(() => {
+							const selTalkDone = !!(
+								selDiary &&
+								(selDiary.content?.includes(
+									"[하루 돌아보기]",
+								) ||
+									selDiary.content?.includes(
+										"[데일리 체크인]",
+									))
+							);
+							const selJournalDone = !!(
+								selDiary && selDiary.content?.includes("[일기]")
+							);
+							const journalText = selDiary?.content
+								?.match(/\[일기\]\s*([\s\S]*)/)?.[1]
+								?.trim();
+							if (selJournalDone)
+								return (
+									<div
+										style={{
+											...s.card,
+											padding: "16px 20px",
+										}}
+									>
+										<div
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "10px",
+												marginBottom: "8px",
+											}}
+										>
+											<span style={{ fontSize: "20px" }}>
+												📝
+											</span>
+											<p
+												style={{
+													fontSize: "14px",
+													fontWeight: "600",
+												}}
+											>
+												일기
+											</p>
+										</div>
+										<p
+											style={{
+												fontSize: "13px",
+												lineHeight: "1.6",
+												color: theme.textSub,
+												overflow: "hidden",
+												display: "-webkit-box",
+												WebkitLineClamp: 3,
+												WebkitBoxOrient: "vertical",
+											}}
+										>
+											{journalText}
+										</p>
+									</div>
+								);
+							if (selTalkDone && !selJournalDone)
+								return (
+									<button
+										onClick={() => navigate("journal")}
+										style={{
+											...s.card,
+											width: "100%",
+											padding: "16px 20px",
+											border: `1px solid ${theme.primary}30`,
+											cursor: "pointer",
+											textAlign: "left",
+											background: theme.primaryLight,
+										}}
+									>
+										<div
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "10px",
+											}}
+										>
+											<span style={{ fontSize: "20px" }}>
+												📝
+											</span>
+											<div style={{ flex: 1 }}>
+												<p
+													style={{
+														fontSize: "14px",
+														fontWeight: "600",
+													}}
+												>
+													일기를 아직 안 썼어요
+												</p>
+												<p
+													style={{
+														fontSize: "12px",
+														color: theme.textSub,
+													}}
+												>
+													오늘의 하루를 기록해보세요
+												</p>
+											</div>
+											<span
+												style={{
+													fontSize: "12px",
+													color: theme.primary,
+													fontWeight: "600",
+												}}
+											>
+												쓰러 가기 →
+											</span>
+										</div>
+									</button>
+								);
+							return (
+								<div
+									style={{
+										...s.card,
+										padding: "16px 20px",
+										display: "flex",
+										alignItems: "center",
+										gap: "12px",
+										color: theme.textLight,
+									}}
+								>
+									<span style={{ fontSize: "20px" }}>🔒</span>
+									<p style={{ fontSize: "13px" }}>
+										하루 돌아보기를 먼저 완료해주세요
+									</p>
+								</div>
+							);
+						})()}
 					</>
 				)}
 			</div>
@@ -2270,7 +2414,7 @@ function DailyTalkPage({ user, token, navigate, targetDate }) {
 					...p,
 					{ role: "assistant", message: data.reply },
 				]);
-				const canWrapUp = userMsgCount >= 3;
+				const canWrapUp = userMsgCount >= 5;
 				if (canWrapUp && (data.wrap_up || np >= 5) && !showMoodPicker) {
 					const q = `${dateLabel}을 이모지로 표현한다면\n어떤 기분에 가장 가까웠나요?`;
 					setTimeout(() => {
@@ -2915,6 +3059,18 @@ function DailyTalkPage({ user, token, navigate, targetDate }) {
 							}}
 						>
 							<button
+								onClick={() => navigate("journal")}
+								style={{
+									...s.btnPrimary,
+									width: "auto",
+									fontSize: "13px",
+									padding: "10px 20px",
+									borderRadius: "24px",
+								}}
+							>
+								📝 일기 쓰러 가기
+							</button>
+							<button
 								onClick={startContinueChat}
 								style={{
 									...s.btnOutline,
@@ -2925,26 +3081,16 @@ function DailyTalkPage({ user, token, navigate, targetDate }) {
 								💬 더 이야기하기
 							</button>
 							<button
-								onClick={() => navigate("dayDetail")}
-								style={{
-									...s.btnOutline,
-									fontSize: "13px",
-									padding: "10px 16px",
-								}}
-							>
-								📝 상세 보기
-							</button>
-							<button
 								onClick={() => navigate("home")}
 								style={{
 									...s.btnOutline,
 									fontSize: "13px",
 									padding: "10px 16px",
-									borderColor: theme.accent,
-									color: theme.accent,
+									borderColor: theme.textLight,
+									color: theme.textSub,
 								}}
 							>
-								🏠 홈으로
+								나중에 쓸게요
 							</button>
 						</div>
 					</div>
@@ -7009,6 +7155,369 @@ function DoctorPatientDetail({ user, token, navigate, patientId }) {
 						)}
 					</div>
 				)}
+			</div>
+		</div>
+	);
+}
+
+// ============================================================
+// JOURNAL — 일기 쓰기
+// ============================================================
+function JournalPage({ user, token, navigate, targetDate }) {
+	const isToday = targetDate === todayStr();
+	const dateLabel = isToday ? "오늘" : fmtDate(targetDate);
+	const [diary, setDiary] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [text, setText] = useState("");
+	const [saving, setSaving] = useState(false);
+	const [saved, setSaved] = useState(false);
+
+	useEffect(() => {
+		(async () => {
+			try {
+				const diaries = await api("GET", "/diary/list", null, token);
+				const d = diaries.find((x) => x.created_date === targetDate);
+				if (d) {
+					setDiary(d);
+					// 이미 일기가 있으면 기존 텍스트 채우기
+					const match = d.content.match(/\[일기\]\s*([\s\S]*)/);
+					if (match) setText(match[1].trim());
+				}
+			} catch (e) {}
+			setLoading(false);
+		})();
+	}, []);
+
+	// AI 요약 추출 (태그 제거)
+	const getSummary = () => {
+		if (!diary) return null;
+		const lines = diary.content
+			.split("\n")
+			.filter(
+				(l) =>
+					!l.startsWith("[하루 돌아보기]") &&
+					!l.startsWith("[데일리 체크인]") &&
+					!l.startsWith("[코멘트]") &&
+					!l.startsWith("[일기]") &&
+					l.trim(),
+			);
+		return lines.join("\n") || null;
+	};
+	const summary = getSummary();
+
+	const save = async () => {
+		if (!text.trim()) return;
+		setSaving(true);
+		try {
+			// 기존 content에 [일기] 추가
+			let newContent = diary ? diary.content : "";
+			if (newContent.includes("[일기]")) {
+				newContent = newContent.replace(
+					/\[일기\][\s\S]*$/,
+					`[일기] ${text.trim()}`,
+				);
+			} else {
+				newContent = newContent + `\n[일기] ${text.trim()}`;
+			}
+			await api(
+				"POST",
+				"/diary",
+				{
+					user_id: user?.user_id,
+					mood: diary?.mood || "😐",
+					content: newContent,
+					created_date: targetDate,
+				},
+				token,
+			);
+			setSaved(true);
+		} catch (e) {
+			alert("저장 실패");
+		}
+		setSaving(false);
+	};
+
+	const skip = () => navigate("home");
+
+	if (loading)
+		return (
+			<div
+				style={{
+					...s.page,
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+					height: "100vh",
+				}}
+			>
+				<p style={{ color: theme.textSub }}>불러오는 중...</p>
+			</div>
+		);
+
+	if (saved)
+		return (
+			<div
+				style={{
+					...s.page,
+					display: "flex",
+					flexDirection: "column",
+					height: "100vh",
+					background: `linear-gradient(180deg, #FFF9F0 0%, #E8F5E9 100%)`,
+				}}
+			>
+				<div style={s.topBar}>
+					<div style={{ width: "30px" }} />
+					<span style={s.topTitle}>📝 일기 완료</span>
+					<div style={{ width: "30px" }} />
+				</div>
+				<div
+					style={{
+						flex: 1,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						padding: "40px 20px",
+					}}
+				>
+					<div style={{ textAlign: "center" }} className="fade-in-up">
+						<p
+							className="float"
+							style={{ fontSize: "56px", marginBottom: "16px" }}
+						>
+							✨
+						</p>
+						<p
+							style={{
+								fontSize: "20px",
+								fontWeight: "700",
+								marginBottom: "8px",
+								color: theme.accent,
+							}}
+						>
+							{dateLabel}의 기록 완료!
+						</p>
+						<p
+							style={{
+								fontSize: "14px",
+								color: theme.textSub,
+								lineHeight: "1.6",
+								marginBottom: "28px",
+							}}
+						>
+							오늘도 수고했어요. 내일 또 만나요!
+						</p>
+						<button
+							onClick={() => navigate("home")}
+							style={{
+								...s.btnPrimary,
+								width: "auto",
+								padding: "16px 32px",
+							}}
+						>
+							🏠 홈으로
+						</button>
+					</div>
+				</div>
+			</div>
+		);
+
+	return (
+		<div
+			style={{
+				...s.page,
+				display: "flex",
+				flexDirection: "column",
+				height: "100vh",
+			}}
+		>
+			<div
+				style={{
+					...s.topBar,
+					background: theme.card,
+					borderBottom: `1px solid ${theme.border}`,
+				}}
+			>
+				<button style={s.backBtn} onClick={() => navigate("home")}>
+					{Icons.back}
+				</button>
+				<span style={s.topTitle}>📝 {dateLabel} 일기</span>
+				<button
+					onClick={skip}
+					style={{
+						background: "none",
+						border: "none",
+						fontSize: "13px",
+						color: theme.textSub,
+						cursor: "pointer",
+						padding: "4px",
+					}}
+				>
+					건너뛰기
+				</button>
+			</div>
+
+			<div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+				{/* AI 요약 참고 카드 */}
+				{summary && (
+					<div
+						className="fade-in-up"
+						style={{ marginBottom: "16px" }}
+					>
+						<div
+							style={{
+								...s.card,
+								width: "100%",
+								border: `1px solid ${theme.blue}30`,
+								background: theme.blueLight,
+								padding: "14px 18px",
+								textAlign: "left",
+							}}
+						>
+							<div
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: "8px",
+									marginBottom: "10px",
+								}}
+							>
+								<span style={{ fontSize: "16px" }}>🤖</span>
+								<p
+									style={{
+										fontSize: "13px",
+										fontWeight: "600",
+										color: theme.blue,
+									}}
+								>
+									AI가 정리한 오늘의 요약
+								</p>
+							</div>
+							<p
+								style={{
+									fontSize: "13px",
+									lineHeight: "1.7",
+									color: theme.text,
+									padding: "10px 12px",
+									background: theme.card,
+									borderRadius: theme.radiusSm,
+								}}
+							>
+								{summary}
+							</p>
+						</div>
+					</div>
+				)}
+
+				{/* 기분 표시 */}
+				{diary?.mood && (
+					<div
+						className="fade-in-up"
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: "10px",
+							marginBottom: "16px",
+							padding: "0 4px",
+						}}
+					>
+						<span style={{ fontSize: "28px" }}>{diary.mood}</span>
+						<div>
+							<p style={{ fontSize: "14px", fontWeight: "600" }}>
+								{dateLabel}의 기분
+							</p>
+							<p
+								style={{
+									fontSize: "12px",
+									color: theme.textSub,
+								}}
+							>
+								하루 돌아보기에서 선택한 기분이에요
+							</p>
+						</div>
+					</div>
+				)}
+
+				{/* 일기 입력 */}
+				<div className="fade-in-up">
+					<p
+						style={{
+							fontSize: "15px",
+							fontWeight: "600",
+							marginBottom: "8px",
+						}}
+					>
+						오늘의 일기
+					</p>
+					<p
+						style={{
+							fontSize: "12px",
+							color: theme.textSub,
+							marginBottom: "12px",
+						}}
+					>
+						자유롭게 오늘 하루를 기록해보세요. AI 요약을 참고해도
+						좋아요.
+					</p>
+					<textarea
+						value={text}
+						onChange={(e) => setText(e.target.value)}
+						placeholder="오늘 하루를 자유롭게 적어보세요...&#10;&#10;예) 오늘은 날씨가 좋아서 기분이 좀 나았다. 점심에 친구를 만나서 커피를 마셨는데, 오랜만에 웃은 것 같다."
+						style={{
+							...s.input,
+							minHeight: "200px",
+							resize: "vertical",
+							lineHeight: "1.7",
+							fontSize: "14px",
+							padding: "16px",
+						}}
+					/>
+					<p
+						style={{
+							fontSize: "11px",
+							color: theme.textLight,
+							marginTop: "6px",
+							textAlign: "right",
+						}}
+					>
+						{text.length}자
+					</p>
+				</div>
+			</div>
+
+			{/* 하단 버튼 */}
+			<div
+				style={{
+					padding: "12px 20px 28px",
+					background: theme.card,
+					borderTop: `1px solid ${theme.border}`,
+					display: "flex",
+					gap: "10px",
+				}}
+			>
+				<button
+					onClick={skip}
+					style={{
+						...s.btnOutline,
+						flex: 1,
+						padding: "14px",
+						borderColor: theme.textLight,
+						color: theme.textSub,
+					}}
+				>
+					건너뛰기
+				</button>
+				<button
+					onClick={save}
+					disabled={saving || !text.trim()}
+					style={{
+						...s.btnPrimary,
+						flex: 2,
+						padding: "14px",
+						opacity: saving || !text.trim() ? 0.5 : 1,
+					}}
+				>
+					{saving ? "저장 중..." : "일기 저장"}
+				</button>
 			</div>
 		</div>
 	);
