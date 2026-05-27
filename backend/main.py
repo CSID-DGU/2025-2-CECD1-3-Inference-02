@@ -154,9 +154,11 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         print(f"[CHAT] routine mode, round={current_round}, target_date={target_date_str}")
         date_context = f" 상담 날짜는 {target_date_str}이야."
         if current_round <= 2:
-            progress_hint = f"\n[시스템: 사용자 {current_round}번째 답변.{date_context} 아직 초반이야. 절대 마무리하지 마. 사용자가 짧게 답하면 네가 가벼운 화제(음식, 날씨, 취미 등)를 먼저 꺼내서 대화를 이끌어. 질문으로 끝내.]"
+            progress_hint = f"\n[시스템: 사용자 {current_round}번째 답변.{date_context} 아직 초반이야. 절대 마무리하지 마. 공감하고 하루에 대해 물어봐. 질문으로 끝내.]"
         elif current_round <= 4:
-            progress_hint = f"\n[시스템: 사용자 {current_round}번째 답변.{date_context} 감정에 대해 가볍게 물어봐. 아직 마무리하지 마. 질문으로 끝내.]"
+            progress_hint = f"\n[시스템: 사용자 {current_round}번째 답변.{date_context} 감정을 구체적으로 탐색해. 아직 마무리하지 마. 질문으로 끝내.]"
+        elif current_round == 5:
+            progress_hint = f"\n[시스템: 사용자 {current_round}번째 답변. 지금까지 대화에서 파악한 사용자의 고민에 대해 작고 실천 가능한 조언을 해줘. 조언 후 '이건 어떻게 생각해?' 같은 질문으로 끝내. wrap_up은 아직 false.]"
         else:
             progress_hint = f"\n[시스템: 사용자 {current_round}번째 답변. 충분히 대화했어. 따뜻하게 마무리해도 좋아. wrap_up: true로 해.]"
 
@@ -173,7 +175,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     if req.mode == "routine":
         server_progress = min(current_round, 6)
         ai_result["progress"] = server_progress
-        if current_round < 3:
+        if current_round < 5:
             ai_result["wrap_up"] = False
 
     # target_date 결정
