@@ -445,7 +445,7 @@ def get_weekly_report(
         try:
             from ai_module import client
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.4-mini",
                 messages=[
                     {"role": "system", "content": "너는 심리 상담 리포트를 작성하는 AI야. 사용자의 주간 기분과 키워드를 보고 2~3문장으로 인사이트를 작성해. 반말, 따뜻하게. 진단하지 마."},
                     {"role": "user", "content": f"이번 주 기분 분포: {mood_summary}\n주요 키워드: {keyword_summary}\n\n이 데이터를 바탕으로 1) 인사이트 (이번 주 감정 흐름 요약) 2) 추천 (다음 주에 시도해볼 만한 것)을 각각 2문장으로 써줘. JSON으로: {{\"insight\":\"...\",\"recommendation\":\"...\"}}"},
@@ -614,7 +614,7 @@ def summarize_chat(req: SummarizeRequest):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5.4-mini",
             messages=[
                 {"role": "system", "content": "너는 상담 대화를 요약하는 AI야. 주어진 대화 내용만을 기반으로 사용자의 하루를 2~3문장으로 따뜻하게 요약해줘. 대화에 없는 내용은 추측하지 마. 반말 사용."},
                 {"role": "user", "content": f"아래 대화를 2~3문장으로 요약해줘. 대화에 언급된 내용만 요약해:\n\n{conversation_text}"},
