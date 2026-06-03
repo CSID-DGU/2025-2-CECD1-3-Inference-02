@@ -179,7 +179,7 @@ def retrieve(
 
     placeholders = ",".join(["?"] * len(ids))
     cur.execute(f"""
-        SELECT id, text, label, age, gender, feature
+        SELECT id, text, label, age, gender, feature, counselor_reply, intervention_type
         FROM documents
         WHERE id IN ({placeholders})
     """, ids)
@@ -205,14 +205,35 @@ def retrieve(
         )
 
         output.append({
-            "text":       r[1],
-            "label":      r[2],
-            "age":        r[3],
-            "gender":     r[4],
-            "feature":    case_feature or [],
-            "similarity": round(text_similarity, 4),   # 코사인 거리 → 유사도
-            "score":      round(score, 4),
-            "score_detail": score_detail,
+            "text":              r[1],
+            "label":             r[2],
+            "age":               r[3],
+            "gender":            r[4],
+            "feature":           case_feature or [],
+            "counselor_reply":   r[6] or "",
+            "intervention_type": r[7] or "",
+            "similarity":        round(text_similarity, 4),
+            "score":             round(score, 4),
+            "score_detail":      score_detail,
         })
 
     return sorted(output, key=lambda item: item["score"], reverse=True)[:top_k]
+
+
+def format_rag_context(similar: list[dict]) -> str:
+    if not similar:
+        return "유사한 사례를 찾지 못했습니다."
+
+    lines = []
+    for r in similar:
+        line = (
+            f"- [우울강도 {r['label']}, {r.get('age', '?')}세 {r.get('gender', '?')}] "
+            f"{r['text']}"
+        )
+        if r.get('counselor_reply'):
+            line += f"\n  → 상담사: {r['counselor_reply']}"
+        if r.get('intervention_type'):
+            line += f"\n  → 개입 유형: {r['intervention_type']}"
+        lines.append(line)
+
+    return "\n".join(lines)
