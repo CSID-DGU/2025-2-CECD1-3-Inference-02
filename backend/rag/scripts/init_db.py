@@ -8,19 +8,30 @@ def init_db():
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS documents (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            patient_id  INTEGER,
-            text        TEXT    NOT NULL,
-            label       INTEGER,
-            age         INTEGER,
-            gender      TEXT,
-            feature     TEXT,       -- "[2,0,0,1,0,...]" JSON 문자열
-            is_embedded INTEGER DEFAULT 0  -- Chroma 등록 여부
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id        TEXT,
+            text              TEXT    NOT NULL,
+            label             INTEGER,
+            age               INTEGER,
+            gender            TEXT,
+            feature           TEXT,           -- "[1,0,0,1,...]" 12차원 JSON 문자열
+            counselor_reply   TEXT,           -- 상담사 응답
+            intervention_type TEXT,           -- 개입 유형 (쉼표 구분)
+            is_embedded       INTEGER DEFAULT 0
         )
     """)
 
-    # 검색 속도를 위한 인덱스
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_label ON documents(label)")
+    # 기존 DB에 신규 컬럼이 없는 경우 마이그레이션
+    for col, coltype in [
+        ("counselor_reply",   "TEXT"),
+        ("intervention_type", "TEXT"),
+    ]:
+        try:
+            cur.execute(f"ALTER TABLE documents ADD COLUMN {col} {coltype}")
+        except sqlite3.OperationalError:
+            pass  # 이미 존재
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_label   ON documents(label)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_patient ON documents(patient_id)")
 
     conn.commit()

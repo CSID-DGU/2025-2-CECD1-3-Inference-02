@@ -42,7 +42,7 @@ def build_metadata(label: int, patient_id: int, age: int, gender: str, feature: 
 
     metadata = {
         "label": int(label),
-        "patient_id": int(patient_id),
+        "patient_id": str(patient_id),
         "age": int(age),
         "gender": str(gender),
         "feature": json.dumps(feature_values),
