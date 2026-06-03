@@ -13,6 +13,7 @@ __pycache__/
 chroma_store/
 *.pickle
 *.csv
+backend/rag/data/source_data/
 
 # ML model
 *.bin
