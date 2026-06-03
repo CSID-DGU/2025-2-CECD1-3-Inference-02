@@ -201,14 +201,16 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     )
     db.add(assistant_log)
 
-    # 위험 대화 저장 (depression_level >= 2)
-    if depression_level >= 2:
+    # 위험 대화 저장 (depression_level >= 2 또는 GPT가 high_risk 감지)
+    cause_str = ai_result.get("cause", "")
+    is_high_risk_cause = "high_risk" in cause_str
+    if depression_level >= 2 or is_high_risk_cause:
         critical = CriticalConversation(
             user_id=req.user_id,
             user_message=req.message,
             assistant_reply=ai_result["reply"],
             depression_level=depression_level,
-            cause=ai_result["cause"],
+            cause=cause_str,
         )
         db.add(critical)
 

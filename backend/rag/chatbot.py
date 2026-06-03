@@ -14,7 +14,7 @@ load_dotenv()
 
 from ai_module import generate_reply, analyze_depression
 from rag.graph import build_user_graph, extract_graph_context, build_graph_prompt
-from rag.rag import retrieve
+from rag.rag import retrieve, format_rag_context
 
 
 # ── 검증용 출력 함수 ─────────────────────────────────────────
@@ -58,7 +58,15 @@ def debug_rag(query: str, depression_level: int, age: int, gender: str) -> None:
         for i, r in enumerate(similar, 1):
             text = r["text"][:80] + ("..." if len(r["text"]) > 80 else "")
             print(f"  {i}. score={r.get('score')} | sim={r.get('similarity')} | label={r.get('label')}")
-            print(f"     {text}")
+            print(f"     내담자: {text}")
+            if r.get("counselor_reply"):
+                reply = r["counselor_reply"][:80] + ("..." if len(r["counselor_reply"]) > 80 else "")
+                print(f"     → 상담사: {reply}")
+            if r.get("intervention_type"):
+                print(f"     → 개입 유형: {r['intervention_type']}")
+
+        print("\n[GPT에 전달되는 RAG 컨텍스트]")
+        print(format_rag_context(similar))
     except Exception as e:
         print(f"검색 실패: {e}")
 
@@ -107,10 +115,19 @@ if __name__ == "__main__":
 
         # ── 4. progress 힌트 (routine 모드만) ────────────────────
         if TEST_MODE == "routine":
-            if current_round < 7:
-                progress_hint = f"\n[시스템: {current_round}번째 답변. wrap_up: false, 질문으로 끝내.]"
+            stage_guides = {
+                1: "오늘 하루 전반을 여는 열린 질문으로 시작해.",
+                2: "1단계에서 나온 이야기에 깊이 공감하고 그 순간의 감정을 탐색해.",
+                3: "수면·식사·신체 컨디션 중 아직 나오지 않은 항목을 자연스럽게 확인해.",
+                4: "지금까지 나온 이야기에서 원인이나 반복 패턴을 조심스럽게 연결해.",
+                5: "파악한 상황에 맞는 구체적이고 실천 가능한 조언을 해.",
+                6: "따뜻하게 마무리해. wrap_up=true.",
+            }
+            if current_round <= 6:
+                guide = stage_guides.get(current_round, "대화를 이어가.")
+                progress_hint = f"\n[시스템: {current_round}단계. progress={current_round}. wrap_up=false. {guide}]"
             else:
-                progress_hint = f"\n[시스템: {current_round}번째 답변. wrap_up: true, 마무리해.]"
+                progress_hint = f"\n[시스템: 마무리 단계. progress={current_round}. wrap_up=true. 따뜻하게 마무리해.]"
         else:
             progress_hint = ""
 

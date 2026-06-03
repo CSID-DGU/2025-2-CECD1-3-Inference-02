@@ -42,6 +42,23 @@ CAUSE_TO_SYMPTOM = {
     "감정 회상": "rumination",
     "정서적 부담": "emotional_distress",
     "힘든 상황": "emotional_distress",
+    "흥미 저하": "anhedonia",
+    "즐거움 없음": "anhedonia",
+    "무쾌감": "anhedonia",
+    "식욕 없음": "appetite_change",
+    "식욕 저하": "appetite_change",
+    "폭식": "appetite_change",
+    "초조함": "psychomotor_change",
+    "안절부절": "psychomotor_change",
+    "몸이 무거움": "psychomotor_change",
+    "무가치감": "worthlessness",
+    "죄책감": "worthlessness",
+    "자책": "worthlessness",
+    "집중력 저하": "concentration_difficulty",
+    "멍함": "concentration_difficulty",
+    "결정 어려움": "concentration_difficulty",
+    "죽고 싶은 생각": "suicidal_ideation",
+    "자해 충동": "suicidal_ideation",
     "high_risk": "high_risk_signal",
 }
 
@@ -70,6 +87,75 @@ QUERY_MOOD_KEYWORDS = {
 # 수면 관련 키워드 집합
 SLEEP_KEYWORDS = {"잠", "수면", "못 자", "잠들기", "일찍 깼", "악몽", "자다가 깼", "수면 부족"}
 
+# 사용자 자연어 발화 → 증상 노드 매핑
+# CAUSE_TO_SYMPTOM은 GPT 출력(정형 cause 텍스트)용, 이 dict는 사용자 발화 직접 매칭용
+QUERY_KEYWORD_TO_SYMPTOM = {
+    # 무기력
+    "기운이 없": "lethargy",
+    "기운 없": "lethargy",
+    "힘이 없": "lethargy",
+    "의욕이 없": "lethargy",
+    "의욕 없": "lethargy",
+    "아무것도 하기 싫": "lethargy",
+    "아무 의욕": "lethargy",
+    # 수면 문제
+    "잠을 못": "sleep_problem",
+    "잠이 안": "sleep_problem",
+    "잠 못": "sleep_problem",
+    "잠들기": "sleep_problem",
+    # 우울감
+    "우울": "depressed_mood",
+    "슬프": "depressed_mood",
+    "기분이 안": "depressed_mood",
+    # 불안
+    "불안": "anxiety",
+    "걱정": "anxiety",
+    "두려": "anxiety",
+    "무서": "anxiety",
+    # 피로
+    "피곤": "fatigue",
+    "지쳐": "fatigue",
+    "지치": "fatigue",
+    "힘들": "fatigue",
+    # 외로움
+    "외로": "loneliness",
+    "혼자인 것": "loneliness",
+    "외톨이": "loneliness",
+    # 스트레스
+    "스트레스": "stress",
+    # 흥미 저하/무쾌감
+    "재미없": "anhedonia",
+    "재미가 없": "anhedonia",
+    "즐겁지": "anhedonia",
+    "흥미가 없": "anhedonia",
+    "아무것도 재미": "anhedonia",
+    "예전엔 좋아했": "anhedonia",
+    # 식욕 변화
+    "밥이 안": "appetite_change",
+    "식욕이 없": "appetite_change",
+    "밥을 못": "appetite_change",
+    "먹기 싫": "appetite_change",
+    # 무가치감/죄책감
+    "쓸모없": "worthlessness",
+    "자책": "worthlessness",
+    "죄책감": "worthlessness",
+    "내 잘못": "worthlessness",
+    # 집중력 저하
+    "집중이 안": "concentration_difficulty",
+    "집중할 수": "concentration_difficulty",
+    "멍하": "concentration_difficulty",
+    # 초조/몸 무거움
+    "초조": "psychomotor_change",
+    "안절부절": "psychomotor_change",
+    "몸이 무거": "psychomotor_change",
+    # 자살/자해
+    "죽고 싶": "suicidal_ideation",
+    "사라지고 싶": "suicidal_ideation",
+    "없어지고 싶": "suicidal_ideation",
+    "자해": "suicidal_ideation",
+    "자살": "high_risk_signal",
+}
+
 NODE_LABELS = {
     # Symptom
     "sleep_problem": "수면 문제",
@@ -87,6 +173,12 @@ NODE_LABELS = {
     "rumination": "반복적 회상",
     "emotional_distress": "정서적 부담",
     "high_risk_signal": "높은 정서적 위험 신호",
+    "anhedonia": "흥미/즐거움 상실",
+    "appetite_change": "식욕 변화",
+    "psychomotor_change": "초조/몸 무거움",
+    "worthlessness": "무가치감/죄책감",
+    "concentration_difficulty": "집중력 저하",
+    "suicidal_ideation": "자살/자해 생각",
 
     # SleepPattern
     "short_sleep": "짧은 수면",
@@ -226,7 +318,14 @@ def _extract_anchor_nodes(G: nx.DiGraph, query: str) -> list[str]:
 
     matched: set[str] = set()
 
-    # 1. 증상 노드 (CAUSE_TO_SYMPTOM 활용)
+    # 1. 증상 노드 — 자연어 발화 매칭 (QUERY_KEYWORD_TO_SYMPTOM 우선)
+    for keyword, symptom in QUERY_KEYWORD_TO_SYMPTOM.items():
+        if keyword in query:
+            node_id = f"symptom_{symptom}"
+            if node_id in G:
+                matched.add(node_id)
+
+    # 1-2. 정형 cause 표현도 보조 매칭 (CAUSE_TO_SYMPTOM)
     for keyword, symptom in CAUSE_TO_SYMPTOM.items():
         if keyword in query:
             node_id = f"symptom_{symptom}"
@@ -811,19 +910,20 @@ def build_graph_prompt(context: dict) -> str:
         if rel_episodes:
             lines.append(f"- 관련 에피소드 ({len(rel_episodes)}건):")
             for ep in rel_episodes[-5:]:
-                parts = []
+                lines.append(f"  · {ep.get('date', '?')}")
                 if ep.get("symptoms"):
-                    parts.append(f"증상: {', '.join(ep['symptoms'])}")
+                    lines.append(f"    증상: {', '.join(ep['symptoms'])}")
                 if ep.get("sleep_patterns"):
-                    parts.append(f"수면 패턴: {', '.join(ep['sleep_patterns'])}")
+                    lines.append(f"    수면 패턴: {', '.join(ep['sleep_patterns'])}")
                 if ep.get("moods"):
-                    parts.append(f"감정: {', '.join(ep['moods'])}")
+                    lines.append(f"    감정: {', '.join(ep['moods'])}")
                 if ep.get("risk_level") is not None:
-                    parts.append(f"위험도: {level_map.get(ep['risk_level'], str(ep['risk_level']))}")
+                    lines.append(f"    위험도: {level_map.get(ep['risk_level'], str(ep['risk_level']))}")
                 if ep.get("sleep_hours") is not None:
-                    parts.append(f"수면 {ep['sleep_hours']}h")
-                detail = " / ".join(parts) if parts else "기록 없음"
-                lines.append(f"  · {ep.get('date', '?')}: {detail}")
+                    lines.append(f"    수면: {ep['sleep_hours']}h")
+                if not any([ep.get("symptoms"), ep.get("sleep_patterns"), ep.get("moods"),
+                            ep.get("risk_level") is not None, ep.get("sleep_hours") is not None]):
+                    lines.append("    기록 없음")
 
         patterns = qctx.get("cross_patterns") or []
         if patterns:
