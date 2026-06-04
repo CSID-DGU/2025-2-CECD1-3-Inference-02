@@ -1,25 +1,26 @@
 
 ## 사전 준비
-팀 공유 파일 필요:   
+팀 공유 파일 필요(드라이브에 전달):   
 - `backend/saved_model/` — KlueBERT 파인튜닝 모델 파일   
-- `backend/rag/data/training_depression_data.csv` — RAG DB 구축용 원본 데이터
+- `backend/rag/data/source_data/` — RAG DB 구축용 원본 데이터
 
 ## 파일 구조 (주요)
 ```
 backend/   
-├── main.py              # FastAPI 서버 진입점   
-├── ai_module.py         # GPT 연동, GraphRAG 컨텍스트 생성   
-├── saved_model/         # KlueBERT 모델 파일 (별도 수령)   
-└── rag/  
-    ├── model.py         # CustomBertForMTL 정의 및 모델 로딩   
-    ├── rag.py           # 유사 발화 벡터 검색 (Chroma + 리랭킹)   
-    ├── graph.py         # GraphRAG: 사용자 지식 그래프 구성 및 순회   
-    ├── db/              # SQLite + Chroma 인덱스   
+├── main.py                       # FastAPI 서버 진입점   
+├── ai_module.py                  # GPT 연동, GraphRAG 컨텍스트 생성   
+├── saved_model/                  # KlueBERT 모델 파일 (별도 수령)   
+└── rag/
+    ├── model.py                  # CustomBertForMTL 정의 및 모델 로딩   
+    ├── rag.py                    # 유사 발화 벡터 검색 (Chroma + 리랭킹)   
+    ├── graph.py                  # GraphRAG: 사용자 지식 그래프 구성 및 순회   
+    ├── db/                       # SQLite + Chroma 인덱스
+    ├── data/source_data/         # RAG DB 구축용 데이터 (별도 수령) 
     └── scripts/   
-        └── setup_rag.py # RAG DB 초기화 스크립트   
+        └── setup_rag.py          # RAG DB 초기화 스크립트   
 ```
 
-## RAG DB 구축 (최초 1회)
+## RAG DB 초기화 및 구축 (최초 1회)
 ```
 cd backend   
 python -m rag.scripts.setup_rag
