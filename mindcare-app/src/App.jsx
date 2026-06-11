@@ -973,10 +973,10 @@ function HomePage({ user, token, navigate, selectedDate, setSelectedDate }) {
 	// 선택 날짜의 수면 완료 여부 (과거 날짜용)
 	const selSleepDone = !!selSleep;
 	// 선택 날짜에 대화가 진행 중인지 (일기는 없지만 대화 기록은 있는 상태)
-	const selHasChat = chatLogs.some(
-		(l) =>
-			l.target_date === selectedDate ||
-			(l.created_date && l.created_date.startsWith(selectedDate)),
+	const selHasChat = chatLogs.some((l) =>
+		l.target_date
+			? l.target_date === selectedDate
+			: l.created_date?.startsWith(selectedDate),
 	);
 	const selInProgress = !selDiary && selHasChat; // 대화 중이지만 완료 안 됨
 
@@ -1800,10 +1800,10 @@ function DayDetailPage({ user, token, navigate, targetDate }) {
 				const d = diaries.find((x) => x.created_date === targetDate);
 				if (d) setDiary(d);
 				const dayLogs = logs
-					.filter(
-						(l) =>
-							l.target_date === targetDate ||
-							l.created_date?.startsWith(targetDate),
+					.filter((l) =>
+						l.target_date
+							? l.target_date === targetDate
+							: l.created_date?.startsWith(targetDate),
 					)
 					.reverse();
 				setChatLogs(dayLogs);
@@ -2327,10 +2327,10 @@ function DailyTalkPage({ user, token, navigate, targetDate }) {
 					token,
 				);
 				const dayLogs = logs
-					.filter(
-						(l) =>
-							l.target_date === targetDate ||
-							l.created_date?.startsWith(targetDate),
+					.filter((l) =>
+						l.target_date
+							? l.target_date === targetDate
+							: l.created_date?.startsWith(targetDate),
 					)
 					.reverse();
 				if (dayLogs.length > 0) {
@@ -7171,6 +7171,7 @@ function JournalPage({ user, token, navigate, targetDate }) {
 	const [text, setText] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [saved, setSaved] = useState(false);
+	const [retrying, setRetrying] = useState(false);
 
 	useEffect(() => {
 		(async () => {
@@ -7179,9 +7180,70 @@ function JournalPage({ user, token, navigate, targetDate }) {
 				const d = diaries.find((x) => x.created_date === targetDate);
 				if (d) {
 					setDiary(d);
-					// 이미 일기가 있으면 기존 텍스트 채우기
 					const match = d.content.match(/\[일기\]\s*([\s\S]*)/);
 					if (match) setText(match[1].trim());
+
+					// 요약 실패했으면 재시도
+					if (d.content.includes("요약을 생성하지 못했")) {
+						setRetrying(true);
+						try {
+							const logs = await api(
+								"GET",
+								"/chat/logs?limit=100",
+								null,
+								token,
+							);
+							const dayLogs = logs.filter(
+								(l) =>
+									l.target_date === targetDate ||
+									l.created_date?.startsWith(targetDate),
+							);
+							if (dayLogs.length > 0) {
+								const messages = dayLogs.map((l) => ({
+									role: l.role,
+									message: l.message,
+								}));
+								const sumResult = await api(
+									"POST",
+									"/chat/summarize",
+									{ user_id: user?.user_id, messages },
+									token,
+								);
+								if (
+									sumResult.summary &&
+									!sumResult.summary.includes(
+										"요약을 생성하지 못했",
+									)
+								) {
+									// 요약 성공 → diary 업데이트
+									const newContent = d.content
+										.replace(
+											/요약을 생성하지 못했어요\./g,
+											sumResult.summary,
+										)
+										.replace(
+											/요약을 생성하지 못했어요/g,
+											sumResult.summary,
+										);
+									await api(
+										"POST",
+										"/diary",
+										{
+											user_id: user?.user_id,
+											mood: d.mood,
+											content: newContent,
+											created_date: targetDate,
+										},
+										token,
+									);
+									setDiary({ ...d, content: newContent });
+								}
+							}
+						} catch (e) {
+							console.log("요약 재시도 실패:", e);
+						}
+						setRetrying(false);
+					}
 				}
 			} catch (e) {}
 			setLoading(false);
@@ -7199,6 +7261,7 @@ function JournalPage({ user, token, navigate, targetDate }) {
 					!l.startsWith("[데일리 체크인]") &&
 					!l.startsWith("[코멘트]") &&
 					!l.startsWith("[일기]") &&
+					!l.includes("요약을 생성하지 못했") &&
 					l.trim(),
 			);
 		return lines.join("\n") || null;
@@ -7358,7 +7421,27 @@ function JournalPage({ user, token, navigate, targetDate }) {
 
 			<div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
 				{/* AI 요약 참고 카드 */}
-				{summary && (
+				{retrying && (
+					<div
+						className="fade-in-up"
+						style={{ marginBottom: "16px" }}
+					>
+						<div
+							style={{
+								...s.card,
+								border: `1px solid ${theme.blue}30`,
+								background: theme.blueLight,
+								padding: "14px 18px",
+								textAlign: "center",
+							}}
+						>
+							<p style={{ fontSize: "13px", color: theme.blue }}>
+								🤖 AI 요약을 다시 생성하고 있어요...
+							</p>
+						</div>
+					</div>
+				)}
+				{!retrying && summary && (
 					<div
 						className="fade-in-up"
 						style={{ marginBottom: "16px" }}

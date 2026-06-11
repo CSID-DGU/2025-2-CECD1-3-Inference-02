@@ -454,7 +454,7 @@ def get_weekly_report(
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.5,
-                max_tokens=200,
+                max_completion_tokens=200,
             )
             import json
             result = json.loads(resp.choices[0].message.content)
@@ -622,7 +622,7 @@ def summarize_chat(req: SummarizeRequest):
                 {"role": "user", "content": f"아래 대화를 2~3문장으로 요약해줘. 대화에 언급된 내용만 요약해:\n\n{conversation_text}"},
             ],
             temperature=0.3,
-            max_tokens=150,
+            max_completion_tokens=150,
         )
         summary = response.choices[0].message.content.strip()
         print(f"[AI] 요약 생성: {summary[:100]}")
