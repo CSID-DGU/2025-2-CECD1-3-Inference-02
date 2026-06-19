@@ -141,7 +141,8 @@ def retrieve(
     gender: str = None,
     user_feature: list[int] = None,
     target_level: int = None,
-    candidate_k: int = None
+    candidate_k: int = None,
+    min_text_similarity: float = 0.3,
 ) -> list[dict]:
     """
     query        : 사용자 발화 텍스트
@@ -155,7 +156,7 @@ def retrieve(
     """
 
     query_embedding = embed_text(query)
-    candidate_k = candidate_k or max(top_k * 6, 30)
+    candidate_k = candidate_k or max(top_k * 12, 30)
 
     # Chroma 필터 조건
     where = {"label": {"$gte": min_label}} if min_label is not None else None
@@ -195,6 +196,8 @@ def retrieve(
             continue
         r = rows[uid]
         text_similarity = 1 - dist
+        if text_similarity < min_text_similarity:
+            continue
         case_feature = _normalize_feature(r[5])
         score, score_detail = _rerank_score(
             text_similarity,
