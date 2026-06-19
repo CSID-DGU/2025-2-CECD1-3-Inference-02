@@ -1,0 +1,8 @@
+fastapi>=0.111,<1
+uvicorn[standard]>=0.30,<1
+numpy>=1.26,<3
+transformers>=4.48,<6
+sentencepiece>=0.2,<1
+safetensors>=0.4,<1
+pydantic>=2.7,<3
+psutil>=5.9,<8

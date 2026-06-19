@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Env files
+.env
+
+# Database
+*.db
+*.sqlite3
+chroma_store/
+*.pickle
+*.csv
+backend/rag/data/source_data/
+
+# ML model
+*.bin
+saved_model/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Mac
+.DS_Store
